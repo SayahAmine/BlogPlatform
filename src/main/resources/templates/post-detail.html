@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Post — BlogPlatform</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script>renderNavbar();</script>
+
+<div class="container">
+    <div id="post-container">
+        <div class="empty">Loading...</div>
+    </div>
+</div>
+
+<script>
+    const postId = window.location.pathname.split('/').pop();
+
+    async function loadPost() {
+        try {
+            const p = await apiFetch(`/api/v1/posts/${postId}`);
+            const user = Auth.getUser();
+            const isAuthor = user && p.author?.id === user.id;
+
+            document.getElementById('post-container').innerHTML = `
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <h1 style="margin-bottom:0.5rem;">${escapeHtml(p.title)}</h1>
+                        <span class="badge badge-${p.status.toLowerCase()}">${p.status}</span>
+                    </div>
+                    <div class="meta" style="margin: 0.5rem 0 1.5rem;">
+                        By ${escapeHtml(p.author?.name)} •
+                        ${p.category ? escapeHtml(p.category.name) : 'No category'} •
+                        ${p.readingTime} min read •
+                        Created ${p.createAt} • Updated ${p.updateAt}
+                    </div>
+                    ${p.tags?.length ? `<div style="margin-bottom:1.5rem">${p.tags.map(t => `<span class="tag">#${escapeHtml(t.name)}</span>`).join('')}</div>` : ''}
+                    <div style="white-space: pre-wrap; line-height: 1.8;">${escapeHtml(p.content)}</div>
+
+                    ${isAuthor ? `
+                        <div style="margin-top:2rem; display:flex; gap:0.5rem;">
+                            <a href="/posts/${p.id}/edit" class="btn btn-secondary">Edit</a>
+                            <button class="btn btn-danger" onclick="deletePost()">Delete</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } catch (err) {
+            document.getElementById('post-container').innerHTML =
+                `<div class="empty">Post not found: ${err.message}</div>`;
+        }
+    }
+
+    async function deletePost() {
+        if (!confirm('Delete this post?')) return;
+        try {
+            await apiFetch(`/api/v1/posts/${postId}`, { method: 'DELETE' });
+            showToast('Post deleted', 'success');
+            setTimeout(() => window.location.href = '/', 800);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    loadPost();
+</script>
+</body>
+</html>

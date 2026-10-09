@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Drafts — BlogPlatform</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script>
+    if (!Auth.isLoggedIn()) window.location.href = '/login';
+    renderNavbar();
+</script>
+
+<div class="container">
+    <h1 style="margin-bottom:1.5rem;">My Drafts</h1>
+    <div id="drafts-container">
+        <div class="empty">Loading...</div>
+    </div>
+</div>
+
+<script>
+    async function loadDrafts() {
+        try {
+            const posts = await apiFetch('/api/v1/posts/drafts') || [];
+            const container = document.getElementById('drafts-container');
+
+            if (posts.length === 0) {
+                container.innerHTML = '<div class="empty">You have no drafts. <a href="/posts/new">Create one</a></div>';
+                return;
+            }
+
+            container.innerHTML = posts.map(p => `
+                <div class="card">
+                    <h3><a href="/posts/${p.id}">${escapeHtml(p.title)}</a></h3>
+                    <div class="meta">
+                        ${p.category ? escapeHtml(p.category.name) : 'No category'} •
+                        ${p.readingTime} min read • Updated ${p.updateAt}
+                    </div>
+                    <div class="excerpt">${escapeHtml(p.content).substring(0, 150)}...</div>
+                </div>
+            `).join('');
+        } catch (err) {
+            document.getElementById('drafts-container').innerHTML =
+                `<div class="empty">Failed to load: ${err.message}</div>`;
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    loadDrafts();
+</script>
+</body>
+</html>

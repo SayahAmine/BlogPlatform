@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BlogPlatform</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script>renderNavbar();</script>
+
+<div class="container">
+    <h1 style="margin-bottom: 1.5rem;">Latest Posts</h1>
+
+    <div class="filters">
+        <input type="text" id="filter-title" placeholder="Search title..." oninput="renderPosts()">
+        <select id="filter-status" onchange="renderPosts()">
+            <option value="">All statuses</option>
+            <option value="PUBLISHED">Published</option>
+            <option value="DRAFT">Draft</option>
+        </select>
+        <button class="btn btn-secondary" onclick="loadPosts()">🔄 Refresh</button>
+    </div>
+
+    <div id="posts-container">
+        <div class="empty">Loading posts...</div>
+    </div>
+</div>
+
+<script>
+    let allPosts = [];
+
+    async function loadPosts() {
+        try {
+            allPosts = await apiFetch('/api/v1/posts') || [];
+            renderPosts();
+        } catch (err) {
+            document.getElementById('posts-container').innerHTML =
+                `<div class="empty">Failed to load posts: ${err.message}</div>`;
+        }
+    }
+
+    function renderPosts() {
+        const titleFilter = document.getElementById('filter-title').value.toLowerCase();
+        const statusFilter = document.getElementById('filter-status').value;
+
+        const filtered = allPosts.filter(p => {
+            const matchesTitle = !titleFilter || p.title.toLowerCase().includes(titleFilter);
+            const matchesStatus = !statusFilter || p.status === statusFilter;
+            return matchesTitle && matchesStatus;
+        });
+
+        const container = document.getElementById('posts-container');
+
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="empty">No posts found. <a href="/posts/new">Create one</a></div>';
+            return;
+        }
+
+        container.innerHTML = filtered.map(p => `
+            <div class="card">
+                <h3><a href="/posts/${p.id}">${escapeHtml(p.title)}</a></h3>
+                <div class="meta">
+                    By ${escapeHtml(p.author?.name || 'Unknown')} •
+                    ${p.category ? escapeHtml(p.category.name) : 'No category'} •
+                    ${p.readingTime} min read •
+                    ${p.createAt}
+                    <span class="badge badge-${p.status.toLowerCase()}">${p.status}</span>
+                </div>
+                <div class="excerpt">${escapeHtml(p.content).substring(0, 200)}...</div>
+                ${p.tags?.length ? `<div style="margin-top:0.75rem">${p.tags.map(t => `<span class="tag">#${escapeHtml(t.name)}</span>`).join('')}</div>` : ''}
+            </div>
+        `).join('');
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    loadPosts();
+</script>
+</body>
+</html>
