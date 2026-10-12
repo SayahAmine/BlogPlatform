@@ -33,4 +33,14 @@ public class WebController {
 
     @GetMapping("/posts/{id}/edit")
     public String editPost() { return "post-form"; }
+
+    @GetMapping("/tags")
+    public String tagsPage() {
+        return "tags";
+    }
+
+    @GetMapping("/categories")
+    public String categoriesPage() {
+        return "categories";
+    }
 }
