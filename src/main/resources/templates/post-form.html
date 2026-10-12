@@ -8,8 +8,14 @@
 <body>
 <script src="/js/api.js"></script>
 <script>
-    if (!Auth.isLoggedIn()) window.location.href = '/login';
-    renderNavbar();
+    validateSession().then(ok => {
+        if (!ok) {
+            window.location.href = '/login';
+            return;
+        }
+        renderNavbar();
+        loadDrafts();   // or whatever the page's init function is
+    });
 </script>
 
 <div class="container">
@@ -26,6 +32,19 @@
             <select id="post-category" required>
                 <option value="">Loading categories...</option>
             </select>
+        </div>
+
+        <div class="form-group">
+            <label>Tags</label>
+            <div id="tag-picker" class="tag-picker">
+                <div class="empty-tags">Loading tags...</div>
+            </div>
+            <div class="tag-create">
+                <input type="text" id="new-tag-input" placeholder="New tag name..."
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();createAndSelectTag();}">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="createAndSelectTag()">+ Add tag</button>
+            </div>
+            <div class="form-hint">Click a tag to select it. New tags are created instantly.</div>
         </div>
 
         <div class="form-group">
@@ -49,17 +68,16 @@
 </div>
 
 <script>
-    // Detect edit mode: /posts/{id}/edit — but our WebController serves same template
-    // We'll parse from path or use query param.
     const pathParts = window.location.pathname.split('/').filter(Boolean);
-    // /posts/new  → ['posts','new']
-    // /posts/{id}/edit → handled separately if you add a route
     let editingId = null;
 
     if (pathParts.length === 3 && pathParts[2] === 'edit') {
         editingId = pathParts[1];
         document.getElementById('page-title').textContent = 'Edit Post';
     }
+
+    let allTags = [];
+    const selectedTagIds = new Set();
 
     async function loadCategories() {
         try {
@@ -70,9 +88,59 @@
                 return;
             }
             select.innerHTML = '<option value="">Select a category</option>' +
-                cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                cats.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
         } catch (err) {
             showToast('Failed to load categories: ' + err.message, 'error');
+        }
+    }
+
+    async function loadTags() {
+        try {
+            allTags = await apiFetch('/api/v1/tags') || [];
+            renderTagPicker();
+        } catch (err) {
+            document.getElementById('tag-picker').innerHTML =
+                `<div class="empty-tags">Failed to load tags: ${err.message}</div>`;
+        }
+    }
+
+    function renderTagPicker() {
+        const picker = document.getElementById('tag-picker');
+        if (!allTags.length) {
+            picker.innerHTML = '<div class="empty-tags">No tags yet — create one below.</div>';
+            return;
+        }
+        picker.innerHTML = allTags.map(t => `
+            <button type="button"
+                    class="tag-chip ${selectedTagIds.has(t.id) ? 'selected' : ''}"
+                    onclick="toggleTag('${t.id}')">#${escapeHtml(t.name)}</button>
+        `).join('');
+    }
+
+    function toggleTag(id) {
+        if (selectedTagIds.has(id)) selectedTagIds.delete(id);
+        else selectedTagIds.add(id);
+        renderTagPicker();
+    }
+
+    async function createAndSelectTag() {
+        const input = document.getElementById('new-tag-input');
+        const name = input.value.trim();
+        if (!name) return;
+
+        try {
+            const created = await apiFetch('/api/v1/tags', {
+                method: 'POST',
+                body: JSON.stringify({ names: [name] })
+            });
+            // Refresh full list to stay in sync
+            allTags = await apiFetch('/api/v1/tags') || [];
+            (created || []).forEach(t => selectedTagIds.add(t.id));
+            input.value = '';
+            renderTagPicker();
+            showToast('Tag created', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
         }
     }
 
@@ -85,6 +153,8 @@
             setTimeout(() => {
                 document.getElementById('post-category').value = p.category?.id || '';
             }, 300);
+            (p.tags || []).forEach(t => selectedTagIds.add(t.id));
+            renderTagPicker();
         } catch (err) {
             showToast(err.message, 'error');
         }
@@ -98,7 +168,7 @@
             content: document.getElementById('post-content').value,
             categoryId: document.getElementById('post-category').value,
             status: document.getElementById('post-status').value,
-            tagIds: []
+            tagIds: [...selectedTagIds]
         };
 
         try {
@@ -122,8 +192,17 @@
         }
     }
 
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
     loadCategories().then(() => {
-        if (editingId) loadPostForEdit();
+        loadTags().then(() => {
+            if (editingId) loadPostForEdit();
+        });
     });
 </script>
 </body>

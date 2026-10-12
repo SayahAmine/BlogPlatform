@@ -10,16 +10,21 @@
 <script>renderNavbar();</script>
 
 <div class="container">
-    <h1 style="margin-bottom: 1.5rem;">Latest Posts</h1>
+    <div class="page-header">
+        <div>
+            <h1>Latest Posts</h1>
+            <div class="subtitle">Browse and read published articles.</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadPosts()">🔄 Refresh</button>
+    </div>
 
     <div class="filters">
         <input type="text" id="filter-title" placeholder="Search title..." oninput="renderPosts()">
         <select id="filter-status" onchange="renderPosts()">
+            <option value="PUBLISHED" selected>Published</option>
             <option value="">All statuses</option>
-            <option value="PUBLISHED">Published</option>
-            <option value="DRAFT">Draft</option>
+            <option value="DRAFT">Drafts</option>
         </select>
-        <button class="btn btn-secondary" onclick="loadPosts()">🔄 Refresh</button>
     </div>
 
     <div id="posts-container">
@@ -31,11 +36,13 @@
     let allPosts = [];
 
     async function loadPosts() {
+        const container = document.getElementById('posts-container');
+        container.innerHTML = '<div class="empty">Loading posts...</div>';
         try {
             allPosts = await apiFetch('/api/v1/posts') || [];
             renderPosts();
         } catch (err) {
-            document.getElementById('posts-container').innerHTML =
+            container.innerHTML =
                 `<div class="empty">Failed to load posts: ${err.message}</div>`;
         }
     }
@@ -45,7 +52,7 @@
         const statusFilter = document.getElementById('filter-status').value;
 
         const filtered = allPosts.filter(p => {
-            const matchesTitle = !titleFilter || p.title.toLowerCase().includes(titleFilter);
+            const matchesTitle = !titleFilter || (p.title || '').toLowerCase().includes(titleFilter);
             const matchesStatus = !statusFilter || p.status === statusFilter;
             return matchesTitle && matchesStatus;
         });
@@ -53,29 +60,45 @@
         const container = document.getElementById('posts-container');
 
         if (filtered.length === 0) {
-            container.innerHTML = '<div class="empty">No posts found. <a href="/posts/new">Create one</a></div>';
+            container.innerHTML = `
+                <div class="empty">
+                    No posts found.
+                    ${Auth.isLoggedIn() ? '<br><a href="/posts/new">Write the first one →</a>' : ''}
+                </div>`;
             return;
         }
 
-        container.innerHTML = filtered.map(p => `
+        container.innerHTML = filtered.map(p => {
+            const isDraft = p.status === 'DRAFT';
+            return `
             <div class="card">
-                <h3><a href="/posts/${p.id}">${escapeHtml(p.title)}</a></h3>
+                <div style="display:flex; justify-content:space-between; align-items:start; gap:1rem;">
+                    <h3 style="flex:1;">
+                        <a href="/posts/${p.id}">${escapeHtml(p.title)}</a>
+                    </h3>
+                    <span class="badge badge-${p.status.toLowerCase()}">${p.status}</span>
+                </div>
                 <div class="meta">
                     By ${escapeHtml(p.author?.name || 'Unknown')} •
                     ${p.category ? escapeHtml(p.category.name) : 'No category'} •
                     ${p.readingTime} min read •
-                    ${p.createAt}
-                    <span class="badge badge-${p.status.toLowerCase()}">${p.status}</span>
+                    ${p.createAt || ''}
                 </div>
-                <div class="excerpt">${escapeHtml(p.content).substring(0, 200)}...</div>
+                <div class="excerpt">${escapeHtml(p.content).substring(0, 220)}...</div>
                 ${p.tags?.length ? `<div style="margin-top:0.75rem">${p.tags.map(t => `<span class="tag">#${escapeHtml(t.name)}</span>`).join('')}</div>` : ''}
-            </div>
-        `).join('');
+                <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+                    <a href="/posts/${p.id}" class="btn btn-sm">${isDraft ? 'Open draft' : 'Read post'} →</a>
+                    ${isDraft && Auth.isLoggedIn() ? `
+                        <a href="/posts/${p.id}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                    ` : ''}
+                </div>
+            </div>`;
+        }).join('');
     }
 
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>"']/g, c => ({
+        return String(str).replace(/[&<>"']/g, c => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[c]));
     }

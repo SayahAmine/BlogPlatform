@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Categories — BlogPlatform</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script>renderNavbar();</script>
+
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>Categories</h1>
+            <div class="subtitle">Group posts under a single category each.</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadCategories()">🔄 Refresh</button>
+    </div>
+
+    <div class="create-panel">
+        <h2>Create category</h2>
+        <form onsubmit="createCategory(event)">
+            <input type="text" id="cat-name" placeholder="Category name" required minlength="2" autocomplete="off">
+            <button type="submit" class="btn">Create</button>
+        </form>
+    </div>
+
+    <div id="cat-list">
+        <div class="empty">Loading...</div>
+    </div>
+</div>
+
+<script>
+    async function loadCategories() {
+        const container = document.getElementById('cat-list');
+        try {
+            const cats = await apiFetch('/api/v1/categories') || [];
+            if (cats.length === 0) {
+                container.innerHTML = '<div class="empty">No categories yet. Create your first one above.</div>';
+                return;
+            }
+            container.innerHTML = cats.map(c => `
+                <div class="list-row">
+                    <div class="row-main">
+                        <span class="row-title">${escapeHtml(c.name)}</span>
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="deleteCategory('${c.id}', '${escapeHtml(c.name)}')">
+                        Delete
+                    </button>
+                </div>
+            `).join('');
+        } catch (err) {
+            container.innerHTML = `<div class="empty">Failed to load categories: ${err.message}</div>`;
+        }
+    }
+
+    async function createCategory(e) {
+        e.preventDefault();
+        const name = document.getElementById('cat-name').value.trim();
+        if (!name) return;
+
+        const payload = { name };
+        // If your CategoryRequest has a description field, add it here, e.g.:
+        // payload.description = document.getElementById('cat-desc')?.value || '';
+
+        try {
+            await apiFetch('/api/v1/categories', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            document.getElementById('cat-name').value = '';
+            showToast('Category created', 'success');
+            loadCategories();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function deleteCategory(id, name) {
+        if (!confirm(`Delete category "${name}"?`)) return;
+        try {
+            await apiFetch(`/api/v1/categories/${id}`, { method: 'DELETE' });
+            showToast('Category deleted', 'success');
+            loadCategories();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    loadCategories();
+</script>
+</body>
+</html>

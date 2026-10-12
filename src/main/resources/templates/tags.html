@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tags — BlogPlatform</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script>renderNavbar();</script>
+
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>Tags</h1>
+            <div class="subtitle">Organize your posts with reusable tags.</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadTags()">🔄 Refresh</button>
+    </div>
+
+    <div class="create-panel">
+        <h2>Create tags</h2>
+        <form onsubmit="createTags(event)">
+            <input type="text" id="tag-input"
+                   placeholder="e.g. java, spring, tutorial  (comma-separated for multiple)"
+                   autocomplete="off">
+            <button type="submit" class="btn">Create</button>
+        </form>
+        <div class="form-hint" style="margin-top:0.6rem;">
+            Tip: separate multiple names with commas to create them all at once.
+        </div>
+    </div>
+
+    <div id="tags-list">
+        <div class="empty">Loading...</div>
+    </div>
+</div>
+
+<script>
+    async function loadTags() {
+        const container = document.getElementById('tags-list');
+        try {
+            const tags = await apiFetch('/api/v1/tags') || [];
+            if (tags.length === 0) {
+                container.innerHTML = '<div class="empty">No tags yet. Create your first one above.</div>';
+                return;
+            }
+            container.innerHTML = tags.map(t => `
+                <div class="list-row">
+                    <div class="row-main">
+                        <span class="tag">#${escapeHtml(t.name)}</span>
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="deleteTag('${t.id}', '${escapeHtml(t.name)}')">
+                        Delete
+                    </button>
+                </div>
+            `).join('');
+        } catch (err) {
+            container.innerHTML = `<div class="empty">Failed to load tags: ${err.message}</div>`;
+        }
+    }
+
+    async function createTags(e) {
+        e.preventDefault();
+        const input = document.getElementById('tag-input');
+        const names = input.value
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+
+        if (names.length === 0) {
+            showToast('Enter at least one tag name', 'error');
+            return;
+        }
+
+        try {
+            await apiFetch('/api/v1/tags', {
+                method: 'POST',
+                body: JSON.stringify({ names })
+            });
+            input.value = '';
+            showToast(`Created ${names.length} tag${names.length > 1 ? 's' : ''}`, 'success');
+            loadTags();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function deleteTag(id, name) {
+        if (!confirm(`Delete tag "#${name}"?`)) return;
+        try {
+            await apiFetch(`/api/v1/tags/${id}`, { method: 'DELETE' });
+            showToast('Tag deleted', 'success');
+            loadTags();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    loadTags();
+</script>
+</body>
+</html>

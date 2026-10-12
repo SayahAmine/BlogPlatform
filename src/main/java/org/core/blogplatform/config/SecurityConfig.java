@@ -47,7 +47,9 @@ public class SecurityConfig {
                                 "/posts/new",
                                 "/posts/*",
                                 "/posts/*/edit",
-                                "/drafts"
+                                "/drafts",
+                                "/categories",
+                                "/tags"
                         ).permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()

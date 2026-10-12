@@ -8,12 +8,27 @@
 <body>
 <script src="/js/api.js"></script>
 <script>
-    if (!Auth.isLoggedIn()) window.location.href = '/login';
-    renderNavbar();
+    validateSession().then(ok => {
+        if (!ok) {
+            window.location.href = '/login';
+            return;
+        }
+        renderNavbar();
+        loadDrafts();   // or whatever the page's init function is
+    });
 </script>
-
 <div class="container">
-    <h1 style="margin-bottom:1.5rem;">My Drafts</h1>
+    <div class="page-header">
+        <div>
+            <h1>My Drafts</h1>
+            <div class="subtitle">Unpublished posts only you can see.</div>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="loadDrafts()">🔄 Refresh</button>
+            <a href="/posts/new" class="btn btn-sm">+ New Post</a>
+        </div>
+    </div>
+
     <div id="drafts-container">
         <div class="empty">Loading...</div>
     </div>
@@ -21,34 +36,64 @@
 
 <script>
     async function loadDrafts() {
+        const container = document.getElementById('drafts-container');
+        container.innerHTML = '<div class="empty">Loading...</div>';
         try {
             const posts = await apiFetch('/api/v1/posts/drafts') || [];
-            const container = document.getElementById('drafts-container');
 
             if (posts.length === 0) {
-                container.innerHTML = '<div class="empty">You have no drafts. <a href="/posts/new">Create one</a></div>';
+                container.innerHTML = `
+                    <div class="empty">
+                        You have no drafts.<br>
+                        <a href="/posts/new">Create one →</a>
+                    </div>`;
                 return;
             }
 
             container.innerHTML = posts.map(p => `
                 <div class="card">
-                    <h3><a href="/posts/${p.id}">${escapeHtml(p.title)}</a></h3>
+                    <div style="display:flex; justify-content:space-between; align-items:start; gap:1rem;">
+                        <h3 style="flex:1;">
+                            <a href="/posts/${p.id}">${escapeHtml(p.title)}</a>
+                        </h3>
+                        <span class="badge badge-draft">DRAFT</span>
+                    </div>
                     <div class="meta">
                         ${p.category ? escapeHtml(p.category.name) : 'No category'} •
-                        ${p.readingTime} min read • Updated ${p.updateAt}
+                        ${p.readingTime} min read •
+                        Updated ${p.updateAt || p.createAt || ''}
                     </div>
-                    <div class="excerpt">${escapeHtml(p.content).substring(0, 150)}...</div>
+                    <div class="excerpt">${escapeHtml(p.content).substring(0, 160)}...</div>
+                    ${p.tags?.length ? `<div style="margin-top:0.75rem">${p.tags.map(t => `<span class="tag">#${escapeHtml(t.name)}</span>`).join('')}</div>` : ''}
+                    <div style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <a href="/posts/${p.id}" class="btn btn-sm btn-secondary">Preview</a>
+                        <a href="/posts/${p.id}/edit" class="btn btn-sm">✏️ Edit</a>
+                        <button class="btn btn-sm btn-danger" onclick="deleteDraft('${p.id}', '${escapeHtml(p.title).replace(/'/g, '&#39;')}')">
+                            🗑 Delete
+                        </button>
+                    </div>
                 </div>
             `).join('');
         } catch (err) {
-            document.getElementById('drafts-container').innerHTML =
+            container.innerHTML =
                 `<div class="empty">Failed to load: ${err.message}</div>`;
+        }
+    }
+
+    async function deleteDraft(id, title) {
+        if (!confirm(`Delete draft "${title}"? This cannot be undone.`)) return;
+        try {
+            await apiFetch(`/api/v1/posts/${id}`, { method: 'DELETE' });
+            showToast('Draft deleted', 'success');
+            loadDrafts();
+        } catch (err) {
+            showToast(err.message, 'error');
         }
     }
 
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>"']/g, c => ({
+        return String(str).replace(/[&<>"']/g, c => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[c]));
     }

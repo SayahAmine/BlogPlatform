@@ -10,12 +10,33 @@ const Auth = {
         return u ? JSON.parse(u) : null;
     },
     isLoggedIn() { return !!this.getToken(); },
-    logout() {
+    clear() {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+    },
+    logout() {
+        this.clear();
         window.location.href = '/login';
     }
 };
+
+// ---- Session validation ----
+// Call this on every page load to verify the token is still valid
+// against the backend. If the token is expired, tampered with, or
+// signed with a stale key (e.g. after a server restart with an
+// ephemeral signing key), the backend returns 401 and we clear it.
+async function validateSession() {
+    if (!Auth.isLoggedIn()) return false;
+    try {
+        const user = await apiFetch('/api/v1/auth/me');
+        // Refresh cached user data (name may have changed, etc.)
+        Auth.saveToken(Auth.getToken(), user);
+        return true;
+    } catch {
+        Auth.clear();
+        return false;
+    }
+}
 
 // ---- Fetch wrapper ----
 async function apiFetch(path, options = {}) {
@@ -28,12 +49,12 @@ async function apiFetch(path, options = {}) {
 
     const res = await fetch(path, { ...options, headers });
 
-    if (res.status === 401 || res.status === 403) {
-        // Token expired/invalid
-        if (!path.includes('/auth/')) {
-            Auth.logout();
-            throw new Error('Session expired. Please log in again.');
-        }
+    // 401 = token missing/invalid/expired → session is dead, log out.
+    // 403 = authenticated but not authorized → do NOT log out; let it
+    //       bubble up so the caller can show "you can't do that".
+    if (res.status === 401 && !path.includes('/auth/')) {
+        Auth.logout();
+        throw new Error('Session expired. Please log in again.');
     }
 
     if (res.status === 204) return null;
@@ -69,15 +90,20 @@ function renderNavbar() {
     const isLogged = Auth.isLoggedIn();
     const path = window.location.pathname;
 
+    const link = (href, label) =>
+        `<a href="${href}" class="${path === href ? 'active' : ''}">${label}</a>`;
+
     const html = `
         <nav class="navbar">
             <a href="/" class="brand">📝 BlogPlatform</a>
             <div class="nav-links">
-                <a href="/" class="${path === '/' ? 'active' : ''}">Home</a>
+                ${link('/', 'Home')}
+                ${link('/categories', 'Categories')}
+                ${link('/tags', 'Tags')}
                 ${isLogged ? `
-                    <a href="/posts/new" class="${path === '/posts/new' ? 'active' : ''}">New Post</a>
-                    <a href="/drafts" class="${path === '/drafts' ? 'active' : ''}">My Drafts</a>
-                    <span style="color: var(--text-muted)">Hi, ${user?.name || 'User'}</span>
+                    ${link('/posts/new', 'New Post')}
+                    ${link('/drafts', 'My Drafts')}
+                    <span class="nav-user">Hi, ${user?.name || 'User'}</span>
                     <button class="btn btn-sm btn-secondary" onclick="Auth.logout()">Logout</button>
                 ` : `
                     <a href="/login" class="btn btn-sm">Login</a>
